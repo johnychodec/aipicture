@@ -1,4 +1,4 @@
-# AI Slovo Image Generator
+# Bible Image Generator
 
 A Python script that generates artistic images from Bible quotes using AI. The script fetches daily Bible quotes, enhances them with AI-generated prompts, and creates unique visual interpretations using Together AI's image generation capabilities.
 
@@ -89,8 +89,5 @@ The script supports multiple art styles with weighted selection:
 
 ## Author
 
-- Jan Hruška (@jan_hru)
+- JohnyChodec
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 
