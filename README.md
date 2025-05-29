@@ -8,9 +8,11 @@ A Python script that generates artistic images from Bible quotes using AI. The s
 - Uses Groq AI to create detailed image generation prompts
 - Generates images using Together AI's FLUX.1-schnell-Free model
 - Integrates weather data to enhance image context
-- Sends generated images to Telegram with formatted captions
+- Posts generated images to both Telegram and Twitter
 - Supports multiple art styles with weighted selection
 - Includes weather icons in Telegram captions
+- Uses art style shortcuts in captions
+- Optimizes images for different platforms
 
 ## Prerequisites
 
@@ -18,6 +20,7 @@ A Python script that generates artistic images from Bible quotes using AI. The s
 - Together AI API key
 - Groq AI API key
 - Telegram Bot Token
+- Twitter API credentials
 - Meteosource API key (for weather data)
 
 ## Installation
@@ -41,10 +44,16 @@ TELEGRAM_TOKEN=your_telegram_token
 TELEGRAM_TEST_TOKEN=your_test_telegram_token
 TELEGRAM_CHAT_ID=your_chat_id
 TELEGRAM_TEST_CHAT_ID=your_test_chat_id
+TWITTER_API_KEY=your_twitter_api_key
+TWITTER_API_SECRET=your_twitter_api_secret
+TWITTER_ACCESS_TOKEN=your_twitter_access_token
+TWITTER_ACCESS_TOKEN_SECRET=your_twitter_access_token_secret
+TWITTER_BEARER_TOKEN=your_twitter_bearer_token
 WEATHER_API_KEY=your_weather_api_key
 WEATHER_PLACE_ID=your_place_id
 PRODUCTION=false
 WEATHER=true
+TWITTER=true
 ```
 
 ## Usage
@@ -56,26 +65,43 @@ python bible_image_generator.py
 
 ## Art Styles
 
-The script supports multiple art styles with weighted selection:
-- Impressionism (weight: 7)
-- Post-impressionism (weight: 6)
-- Fauvism (weight: 5)
-- Expressionism (weight: 6)
-- Cubism (weight: 9)
-- Futurism (weight: 4)
-- Dada (weight: 9)
-- Surrealism (weight: 2)
-- Abstract Expressionism (weight: 6)
-- Minimalism (weight: 8)
-- Mixed Media (weight: 10)
-- Street Art (weight: 3)
-- Deconstructivist Art (weight: 8)
+The script supports multiple art styles with weighted selection and shortcuts:
+- Impressionism (weight: 7, shortcut: imp)
+- Post-impressionism (weight: 6, shortcut: pim)
+- Fauvism (weight: 5, shortcut: fau)
+- Expressionism (weight: 6, shortcut: exp)
+- Cubism (weight: 9, shortcut: cub)
+- Futurism (weight: 4, shortcut: fut)
+- Dada (weight: 9, shortcut: dad)
+- Surrealism (weight: 2, shortcut: sur)
+- Abstract Expressionism (weight: 6, shortcut: aex)
+- Minimalism (weight: 8, shortcut: min)
+- Mixed Media (weight: 10, shortcut: mix)
+- Street Art (weight: 3, shortcut: str)
+- Deconstructivist Art (weight: 8, shortcut: dec)
 
 ## Configuration
 
 - `PRODUCTION`: Set to 'true' or 'false' to switch between production and test environments
 - `WEATHER`: Set to 'true' or 'false' to enable/disable weather data integration
+- `TWITTER`: Set to 'true' or 'false' to enable/disable Twitter posting
 - `WEATHER_PLACE_ID`: Set your location for weather data (default: 'kutna-hora')
+
+## Caption Format
+
+### Telegram
+```
+[weather_icon][date]
+
+[quote]([art_style_shortcut])
+```
+
+### Twitter
+```
+[quote]
+
+#Bible21 #VerseOfTheDay #[ArtStyle]
+```
 
 ## Dependencies
 
@@ -86,6 +112,7 @@ The script supports multiple art styles with weighted selection:
 - python-telegram-bot
 - Pillow
 - groq
+- tweepy
 
 ## Author
 
