@@ -134,67 +134,80 @@ IMAGE_ART = {
     'impressionism': {
         'description': 'Capturing fleeting moments with visible brushstrokes and emphasis on light effects',
         'characteristics': ['loose brushwork', 'natural light', 'outdoor scenes', 'vibrant colors', 'captured moments'],
-        'weight': 7 # Highest weight - works excellently with nature and light themes
+        'weight': 7,  # Highest weight - works excellently with nature and light themes
+        'shortcut': 'imp'
     },
     'post_impressionism': {
         'description': 'Emotional and symbolic use of color and form beyond natural representation',
         'characteristics': ['bold colors', 'expressive brushstrokes', 'symbolic elements', 'emotional depth', 'structured composition'],
-        'weight': 6  # Very high weight - excellent for emotional and symbolic content
+        'weight': 6,  # Very high weight - excellent for emotional and symbolic content
+        'shortcut': 'pim'
     },
     'fauvism': {
         'description': 'Bold, non-naturalistic colors and simplified forms',
         'characteristics': ['intense colors', 'simplified forms', 'expressive brushwork', 'emotional impact', 'non-naturalistic palette'],
-        'weight': 5  # High weight - strong emotional impact
+        'weight': 5,  # High weight - strong emotional impact
+        'shortcut': 'fau'
     },
     'expressionism': {
         'description': 'Distorted forms and intense colors to express emotional experience',
         'characteristics': ['distorted forms', 'intense colors', 'emotional expression', 'subjective perspective', 'dramatic contrast'],
-        'weight': 6  # High weight - good for emotional content
+        'weight': 6,  # High weight - good for emotional content
+        'shortcut': 'exp'
     },
     'cubism': {
         'description': 'Geometric fragmentation and multiple perspectives',
         'characteristics': ['geometric forms', 'multiple viewpoints', 'fragmented space', 'analytical approach', 'overlapping planes'],
-        'weight': 9  # Medium-high weight - interesting for abstract concepts
+        'weight': 9,  # Medium-high weight - interesting for abstract concepts
+        'shortcut': 'cub'
     },
     'futurism': {
         'description': 'Dynamic movement and modern technology representation',
         'characteristics': ['dynamic lines', 'speed elements', 'technological themes', 'motion blur', 'modern subjects'],
-        'weight': 4  # Lower weight - less suitable for spiritual content
+        'weight': 4,  # Lower weight - less suitable for spiritual content
+        'shortcut': 'fut'
     },
     'dada': {
         'description': 'Anti-art movement with absurd and irrational elements',
         'characteristics': ['absurd elements', 'found objects', 'irrational composition', 'challenging norms', 'experimental techniques'],
-        'weight': 9  # Low weight - might be too abstract
+        'weight': 9,  # Low weight - might be too abstract
+        'shortcut': 'dad'
     },
     'surrealism': {
         'description': 'Dreamlike imagery and unconscious mind exploration',
         'characteristics': ['dreamlike elements', 'unusual juxtapositions', 'symbolic imagery', 'fantastical scenes', 'psychological depth'],
-        'weight': 2  # Low weight - great for spiritual and symbolic content, but i dont like it
+        'weight': 2,  # Low weight - great for spiritual and symbolic content, but i dont like it
+        'shortcut': 'sur'
     },
     'abstract_expressionism': {
         'description': 'Spontaneous, emotional expression through abstract forms',
         'characteristics': ['gestural brushstrokes', 'emotional intensity', 'abstract forms', 'spontaneous creation', 'large scale'],
-        'weight': 6  # High weight - good for emotional expression
+        'weight': 6,  # High weight - good for emotional expression
+        'shortcut': 'aex'
     },    
     'minimalism': {
         'description': 'Reduced to essential elements and geometric forms',
         'characteristics': ['simple forms', 'clean lines', 'limited palette', 'reduced elements', 'precise composition'],
-        'weight': 8  # Medium-high weight - good for clear messages
+        'weight': 8,  # Medium-high weight - good for clear messages
+        'shortcut': 'min'
     },    
     'mixed_media': {
         'description': 'Combination of various materials and techniques',
         'characteristics': ['diverse materials', 'layered elements', 'textural variety', 'experimental combinations', 'multimedia approach'],
-        'weight': 10  # Medium weight - versatile but might be too complex
+        'weight': 10,  # Medium weight - versatile but might be too complex
+        'shortcut': 'mix'
     },    
     'street_art': {
         'description': 'Urban expression and public space intervention',
         'characteristics': ['urban elements', 'bold graphics', 'public space', 'social commentary', 'graffiti techniques'],
-        'weight': 3  # Low weight - might be too modern
+        'weight': 3,  # Low weight - might be too modern
+        'shortcut': 'str'
     },
     'deconstructivist_art': {
         'description': 'Deconstructivist art is a style that deconstructs traditional forms and structures, often using geometric shapes and lines.',
         'characteristics': ['geometric shapes', 'lines', 'deconstruction', 'abstraction', 'modernism'],
-        'weight': 8  # Medium weight - balanced approach
+        'weight': 8,  # Medium weight - balanced approach
+        'shortcut': 'dec'
     }
 }
 
@@ -654,10 +667,12 @@ def process_quote_and_image(quote: str) -> bool:
             caption += f"{weather_info}"
         else:
             caption += "📖"
-        caption += f" {today_date}"            
-        caption += f" {art_style['name'].replace('_', ' ').title()}\n\n"
-        caption += f"{quote}"      
-        #caption += f" 🎨 {art_style['name'].replace('_', ' ').title()}"
+        caption += f" {today_date}"  
+        caption += "\n\n"  
+        caption += f"{quote}"            
+        caption += f" ({art_style['shortcut']})"
+        
+          
         
         if not TelegramBot.send_image(image_bytes, caption):
             logging.error("Failed to send image to Telegram")
