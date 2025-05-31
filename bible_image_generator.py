@@ -210,7 +210,7 @@ IMAGE_ART = {
     'dada': {
         'description': 'Anti-art movement with absurd and irrational elements',
         'characteristics': ['absurd elements', 'found objects', 'irrational composition', 'challenging norms', 'experimental techniques'],
-        'weight': 9,  # Low weight - might be too abstract
+        'weight': 8,  # Low weight - might be too abstract
         'shortcut': 'dad'
     },
     'surrealism': {
@@ -688,169 +688,70 @@ class TwitterBot:
     
     def __init__(self):
         """Initialize Twitter client with authentication."""
-        self.client = self._authenticate()
-        self.media_client = self._authenticate_media()
-        self._verify_permissions()
-        
-    def _verify_permissions(self):
-        """Verify Twitter API permissions."""
-        try:
-            # Test basic API access
-            self.client.get_me()
-            logging.info("Successfully verified basic API access")
-            
-        except Exception as e:
-            logging.error(f"Permission verification failed: {str(e)}")
-            if hasattr(e, 'response'):
-                logging.error(f"Response status: {e.response.status_code}")
-                logging.error(f"Response text: {e.response.text}")
-            raise
-            
-    def _authenticate(self):
-        """Authenticate with Twitter API using OAuth 1.0a."""
-        try:
-            client = tweepy.Client(
-                consumer_key=Config.TWITTER_API_KEY,
-                consumer_secret=Config.TWITTER_API_SECRET,
-                access_token=Config.TWITTER_ACCESS_TOKEN,
-                access_token_secret=Config.TWITTER_ACCESS_TOKEN_SECRET
-            )
-            logging.info("Successfully authenticated with Twitter API")
-            return client
-        except Exception as e:
-            logging.error(f"Failed to authenticate with Twitter API: {str(e)}")
-            return None
-            
-    def _authenticate_media(self):
-        """Authenticate with Twitter API for media upload using OAuth 1.0a."""
-        try:
-            auth = tweepy.OAuth1UserHandler(
-                Config.TWITTER_API_KEY,
-                Config.TWITTER_API_SECRET,
-                Config.TWITTER_ACCESS_TOKEN,
-                Config.TWITTER_ACCESS_TOKEN_SECRET
-            )
-            client = tweepy.API(auth)
-            logging.info("Successfully authenticated with Twitter API for media upload")
-            return client
-        except Exception as e:
-            logging.error(f"Failed to authenticate with Twitter API for media upload: {str(e)}")
-            return None
+        self.client = tweepy.Client(
+            consumer_key=Config.TWITTER_API_KEY,
+            consumer_secret=Config.TWITTER_API_SECRET,
+            access_token=Config.TWITTER_ACCESS_TOKEN,
+            access_token_secret=Config.TWITTER_ACCESS_TOKEN_SECRET
+        )
+        self.media_client = tweepy.API(tweepy.OAuth1UserHandler(
+            Config.TWITTER_API_KEY,
+            Config.TWITTER_API_SECRET,
+            Config.TWITTER_ACCESS_TOKEN,
+            Config.TWITTER_ACCESS_TOKEN_SECRET
+        ))
             
     def optimize_image(self, image_bytes: bytes) -> bytes:
-        """Optimize image for Twitter upload.
-        
-        Args:
-            image_bytes: Original image bytes
-            
-        Returns:
-            bytes: Optimized image bytes
-        """
+        """Optimize image for Twitter upload."""
         try:
-            # Open image from bytes
             img = Image.open(io.BytesIO(image_bytes))
-            
-            # Convert to RGB if necessary
             if img.mode in ('RGBA', 'P'):
                 img = img.convert('RGB')
-            
-            # Resize if too large (Twitter's max is 5MB)
-            max_size = (2048, 2048)  # Twitter's max dimensions
+            max_size = (2048, 2048)
             if img.size[0] > max_size[0] or img.size[1] > max_size[1]:
                 img.thumbnail(max_size, Image.Resampling.LANCZOS)
-            
-            # Save to bytes with optimization
             output = io.BytesIO()
             img.save(output, format='JPEG', quality=85, optimize=True)
             return output.getvalue()
-            
         except Exception as e:
             logging.error(f"Error optimizing image for Twitter: {str(e)}")
-            return image_bytes  # Return original if optimization fails
+            return image_bytes
             
     def format_caption(self, quote: str, art_style: dict, weather_info: str) -> str:
-        """Format caption for Twitter post.
-        
-        Args:
-            quote: Bible quote
-            art_style: Selected art style dictionary
-            weather_info: Weather information string
-            
-        Returns:
-            str: Formatted caption
-        """
-        # Start with the quote
+        """Format caption for Twitter post."""
         caption = f"{quote}\n\n"
-        
-        # Add hashtags
         hashtags = ["#Bible21", "#VerseOfTheDay"]
-        
-        # Add art style hashtag using the complete name
         style_name = art_style['name'].replace('_', ' ').title()
         style_hashtag = f"#{style_name.replace(' ', '')}"
         hashtags.append(style_hashtag)
-        
-        # Add hashtags to caption
         caption += " ".join(hashtags)
-        
         return caption
         
     async def post_image(self, image_bytes: bytes, quote: str, art_style: dict, weather_info: str) -> bool:
-        """Post image to Twitter with caption.
-        
-        Args:
-            image_bytes: Image bytes to post
-            quote: Bible quote
-            art_style: Selected art style dictionary
-            weather_info: Weather information string
-            
-        Returns:
-            bool: True if post was successful, False otherwise
-        """
+        """Post image to Twitter with caption."""
         if not Config.is_twitter_enabled():
             logging.info("Twitter posting is disabled")
             return True
             
         try:
-            # Optimize image for Twitter
             optimized_image = self.optimize_image(image_bytes)
-            logging.info("Image optimized successfully")
-            
-            # Format caption
             caption = self.format_caption(quote, art_style, weather_info)
-            logging.info(f"Formatted caption: {caption}")
             
-            # Upload media using v1.1 API
             try:
                 media = self.media_client.media_upload(filename="image.jpg", file=io.BytesIO(optimized_image))
-                logging.info(f"Media uploaded successfully, media_id: {media.media_id}")
-            except Exception as e:
-                logging.error(f"Media upload failed: {str(e)}")
-                if hasattr(e, 'response'):
-                    logging.error(f"Response status: {e.response.status_code}")
-                    logging.error(f"Response text: {e.response.text}")
-                raise
-            
-            # Create tweet with media using v2 API
-            try:
                 response = self.client.create_tweet(
                     text=caption,
                     media_ids=[media.media_id]
                 )
                 logging.info(f"Successfully posted to Twitter: {response.data['id']}")
-                logging.info(f"Tweet URL: https://x.com/user/status/{response.data['id']}")
+                return True
             except Exception as e:
-                logging.error(f"Tweet creation failed: {str(e)}")
-                if hasattr(e, 'response'):
-                    logging.error(f"Response status: {e.response.status_code}")
-                    logging.error(f"Response text: {e.response.text}")
-                raise
-            
-            return True
-            
+                logging.error(f"Twitter posting failed: {str(e)}")
+                return True
+                
         except Exception as e:
-            logging.error(f"Error posting to Twitter: {str(e)}")
-            return False
+            logging.error(f"Error in Twitter posting process: {str(e)}")
+            return True
 
 def process_quote_and_image(quote: str) -> bool:
     """Process the quote and generate/send image."""
@@ -872,17 +773,24 @@ def process_quote_and_image(quote: str) -> bool:
         # Format Telegram caption (with weather, date, and shortcut at the end)
         telegram_caption = f"{weather_info}{current_date}\n\n{quote}({art_style['shortcut']})"
         
-        # Format Twitter caption (quote with verse reference)
-        twitter_caption = quote  # The quote already includes the verse reference
-        
         # Send to Telegram
         telegram_success = TelegramBot.send_image(image_bytes, telegram_caption)
+        if not telegram_success:
+            return False
         
-        # Send to Twitter
-        twitter_bot = TwitterBot()
-        twitter_success = asyncio.run(twitter_bot.post_image(image_bytes, twitter_caption, art_style, weather_info))
+        # Only proceed with Twitter if enabled
+        if Config.is_twitter_enabled():
+            # Format Twitter caption (quote with verse reference)
+            twitter_caption = quote  # The quote already includes the verse reference
+            
+            # Send to Twitter
+            twitter_bot = TwitterBot()
+            twitter_success = asyncio.run(twitter_bot.post_image(image_bytes, twitter_caption, art_style, weather_info))
+            # Twitter success is optional, we don't fail the whole process if Twitter fails
+            if not twitter_success:
+                logging.warning("Twitter posting failed, but continuing with process")
         
-        return telegram_success and twitter_success
+        return True  # Return True if at least Telegram was successful
         
     except Exception as e:
         logging.error(f"Error processing quote and image: {str(e)}")
