@@ -1,110 +1,118 @@
-# Bible Image Generator
+# AI Slovo Image Generator
 
-A Python script that generates artistic images from Bible quotes using AI. The script fetches daily Bible quotes, enhances them with AI-generated prompts, and creates unique visual interpretations using Together AI's image generation capabilities.
+## Description
+This script generates images based on Bible quotes and posts them to Telegram and Twitter. It uses Together AI for image generation and either Groq AI or Venice.ai for prompt enhancement.
 
 ## Features
-
-- Fetches daily Bible quotes from bible21.cz
-- Uses Groq AI to create detailed image generation prompts
+- Fetches Bible quotes from multiple sources (bible21.cz and dailyverses.net)
 - Generates images using Together AI's FLUX.1-schnell-Free model
-- Integrates weather data to enhance image context
-- Posts generated images to both Telegram and Twitter
+- Enhances prompts using either Groq AI or Venice.ai
+- Posts images to Telegram and Twitter
+- Includes weather information in captions
 - Supports multiple art styles with weighted selection
-- Includes weather icons in Telegram captions
-- Uses art style shortcuts in captions
-- Optimizes images for different platforms
-
-## Prerequisites
-
-- Python 3.x
-- Together AI API key
-- Groq AI API key
-- Telegram Bot Token
-- Twitter API credentials
-- Meteosource API key (for weather data)
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/johnychodec/aipicture.git
-cd aipicture
-```
-
-2. Install required packages:
-```bash
-pip install -r requirements.txt
-```
-
-3. Create a `.env` file with your API keys:
-```env
-TOGETHER_API_KEY=your_together_api_key
-GROQ_API_KEY=your_groq_api_key
-TELEGRAM_TOKEN=your_telegram_token
-TELEGRAM_TEST_TOKEN=your_test_telegram_token
-TELEGRAM_CHAT_ID=your_chat_id
-TELEGRAM_TEST_CHAT_ID=your_test_chat_id
-TWITTER_API_KEY=your_twitter_api_key
-TWITTER_API_SECRET=your_twitter_api_secret
-TWITTER_ACCESS_TOKEN=your_twitter_access_token
-TWITTER_ACCESS_TOKEN_SECRET=your_twitter_access_token_secret
-TWITTER_BEARER_TOKEN=your_twitter_bearer_token
-WEATHER_API_KEY=your_weather_api_key
-WEATHER_PLACE_ID=your_place_id
-PRODUCTION=false
-WEATHER=true
-TWITTER=true
-```
-
-## Usage
-
-Run the script:
-```bash
-python bible_image_generator.py
-```
-
-## Art Styles
-
-The script supports multiple art styles with weighted selection and shortcuts:
-- Impressionism (weight: 7, shortcut: imp)
-- Post-impressionism (weight: 6, shortcut: pim)
-- Fauvism (weight: 5, shortcut: fau)
-- Expressionism (weight: 6, shortcut: exp)
-- Cubism (weight: 9, shortcut: cub)
-- Futurism (weight: 4, shortcut: fut)
-- Dada (weight: 9, shortcut: dad)
-- Surrealism (weight: 2, shortcut: sur)
-- Abstract Expressionism (weight: 6, shortcut: aex)
-- Minimalism (weight: 8, shortcut: min)
-- Mixed Media (weight: 10, shortcut: mix)
-- Street Art (weight: 3, shortcut: str)
-- Deconstructivist Art (weight: 8, shortcut: dec)
+- Robust error handling and retry mechanisms
+- Comprehensive logging system
 
 ## Configuration
+The script uses environment variables for configuration. Create a `.env` file with the following variables:
 
-- `PRODUCTION`: Set to 'true' or 'false' to switch between production and test environments
-- `WEATHER`: Set to 'true' or 'false' to enable/disable weather data integration
+### Basic Configuration
+- `PRODUCTION`: Set to 'true' or 'false' to enable/disable production mode
+- `WEATHER`: Set to 'true' or 'false' to enable/disable weather data fetching
 - `TWITTER`: Set to 'true' or 'false' to enable/disable Twitter posting
-- `WEATHER_PLACE_ID`: Set your location for weather data (default: 'kutna-hora')
+- `AI_SERVICE`: Set to 'groq' or 'venice' to select the AI service for prompt enhancement
 
-## Caption Format
+### Telegram Configuration
+- `TELEGRAM_TOKEN`: Your Telegram bot token
+- `TELEGRAM_TEST_TOKEN`: Your test Telegram bot token
+- `TELEGRAM_CHAT_ID`: Your Telegram channel ID
+- `TELEGRAM_TEST_CHAT_ID`: Your test Telegram channel ID
+
+### Twitter Configuration
+- `TWITTER_API_KEY`: Your Twitter API key
+- `TWITTER_API_SECRET`: Your Twitter API secret
+- `TWITTER_ACCESS_TOKEN`: Your Twitter access token
+- `TWITTER_ACCESS_TOKEN_SECRET`: Your Twitter access token secret
+- `TWITTER_BEARER_TOKEN`: Your Twitter bearer token
+
+### API Keys
+- `TOGETHER_API_KEY`: Your Together AI API key
+- `GROQ_API_KEY`: Your Groq AI API key
+- `VENICE_API_KEY`: Your Venice.ai API key
+- `WEATHER_API_KEY`: Your Meteosource API key
+- `WEATHER_PLACE_ID`: Your Meteosource place ID (default: kutna-hora)
+
+### Retry Configuration
+- `MAX_RETRIES`: Maximum number of retry attempts (default: 3)
+- `RETRY_DELAY`: Delay between retries in seconds (default: 5)
+
+## Art Styles
+The script supports various art styles for image generation. Each style has a weight that determines its selection probability and a shortcut used in captions:
+
+- Impressionism (weight: 8, shortcut: imp)
+- Post-impressionism (weight: 8, shortcut: pim)
+- Fauvism (weight: 5, shortcut: fau)
+- Expressionism (weight: 8, shortcut: exp)
+- Cubism (weight: 8, shortcut: cub)
+- Futurism (weight: 4, shortcut: fut)
+- Dada (weight: 8, shortcut: dad)
+- Surrealism (weight: 5, shortcut: sur)
+- Abstract Expressionism (weight: 7, shortcut: aex)
+- Minimalism (weight: 8, shortcut: min)
+- Mixed Media (weight: 8, shortcut: mix)
+- Street Art (weight: 4, shortcut: str)
+- Deconstructivist Art (weight: 8, shortcut: dec)
+- Art Deco (weight: 8, shortcut: ade)
+
+## Usage
+1. Set up your environment variables in `.env`
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run the script: `python bible_image_generator.py`
+
+## Output Format
+The script generates images with captions in the following format:
 
 ### Telegram
 ```
-[weather_icon][date]
+[Weather Icon] [Date]
 
-[quote]([art_style_shortcut])
+[Quote Text] ([Art Style Shortcut])
 ```
 
 ### Twitter
 ```
-[quote]
+[Quote Text]
 
-#Bible21 #VerseOfTheDay #[ArtStyle]
+#Bible21 #[ArtStyle] #VerseOfTheDay
 ```
 
-## Dependencies
+## Error Handling
+The script includes comprehensive error handling:
+- Retries failed API calls
+- Falls back to alternative quote sources
+- Falls back to alternative AI services
+- Logs errors and warnings
+- Continues operation even if Twitter posting fails
+- Handles rate limits gracefully
+- Provides detailed error logging
 
+## AI Services
+The script supports two AI services for prompt enhancement:
+
+### Groq AI
+- Uses llama-3.3-70b-versatile model
+- Temperature: 0.7
+- Max tokens: 500
+
+### Venice.ai
+- Uses venice-uncensored model
+- Temperature: 0.7
+- Max tokens: 500
+- Top p: 0.9
+- Frequency penalty: 0
+- Presence penalty: 0
+
+## Dependencies
 - together
 - python-dotenv
 - requests
@@ -114,7 +122,14 @@ The script supports multiple art styles with weighted selection and shortcuts:
 - groq
 - tweepy
 
-## Author
+## Recent Updates
+- Added Venice.ai integration as an alternative AI service
+- Updated art style weights for better distribution
+- Added Art Deco style
+- Improved error handling and logging
+- Optimized Twitter posting logic
+- Added comprehensive documentation
 
-- JohnyChodec
+## License
+MIT License
 

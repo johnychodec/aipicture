@@ -6,7 +6,7 @@
 #######
 
 """
-AI Slovo Image Generator
+Bible Image Generator
 
 This script automates the process of creating visual interpretations of Bible quotes:
 1. Fetches a daily Bible quote from bible21.cz
@@ -35,7 +35,7 @@ import requests
 import time
 from bs4 import BeautifulSoup as bs
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Union
 from dotenv import load_dotenv
 from together import Together
 from telegram import Bot
@@ -45,6 +45,7 @@ import random
 import io
 from PIL import Image
 import tweepy
+from abc import ABC, abstractmethod
 
 # Load environment variables
 load_dotenv()
@@ -61,6 +62,263 @@ logging.basicConfig(
 
 # Debug logging for environment variables
 logging.info(f"Raw PRODUCTION value from env: {os.getenv('PRODUCTION')}")
+
+class QuoteSource(ABC):
+    """Abstract base class for quote sources."""
+    
+    @abstractmethod
+    def fetch_quote(self) -> Optional[str]:
+        """Fetch a quote from the source."""
+        pass
+    
+    @abstractmethod
+    def validate_config(self) -> bool:
+        """Validate source configuration."""
+        pass
+    
+    @abstractmethod
+    def get_source_name(self) -> str:
+        """Get the name of the quote source."""
+        pass
+
+class Bible21QuoteSource(QuoteSource):
+    """Quote source for bible21.cz."""
+    
+    def __init__(self):
+        self.url = Config.BIBLE21_URL
+        self.quote_class = Config.BIBLE21_QUOTE_CLASS
+    
+    def debug_quote_element(self) -> None:
+        """
+        Debug function to help identify the current quote element class.
+        
+        This method:
+        1. Fetches the Bible website
+        2. Logs all span elements and their classes
+        3. Helps identify the current quote element class when it changes
+        """
+        try:
+            response = requests.get(self.url, timeout=10)
+            response.encoding = 'utf-8'
+            response.raise_for_status()
+            
+            soup = bs(response.text, 'html.parser')
+            
+            # Find all span elements
+            spans = soup.find_all('span')
+            logging.info(f"Found {len(spans)} span elements on the page")
+            
+            # Log each span with its class
+            for span in spans:
+                if span.get('class'):
+                    logging.info(f"Span class: {span.get('class')}")
+                    logging.info(f"Span text: {span.get_text().strip()[:100]}...")
+            
+            # Try to find the quote using the current class
+            quote_element = soup.find('span', attrs={'class': self.quote_class})
+            if quote_element:
+                logging.info(f"Quote found with current class '{self.quote_class}': {quote_element.get_text().strip()}")
+            else:
+                logging.warning(f"Quote NOT found with current class '{self.quote_class}'")
+                
+        except Exception as e:
+            logging.error(f"Error in debug_quote_element: {str(e)}")
+    
+    def fetch_quote(self) -> Optional[str]:
+        """Fetch the daily quote from bible21.cz."""
+        for attempt in range(Config.MAX_RETRIES):
+            try:
+                response = requests.get(self.url, timeout=10)
+                response.encoding = 'utf-8'
+                response.raise_for_status()
+                
+                soup = bs(response.text, 'html.parser')
+                quote_element = soup.find('span', attrs={'class': self.quote_class})
+                
+                if quote_element:
+                    quote_text = quote_element.get_text().strip()
+                    logging.info(f"Successfully fetched quote from bible21.cz: {quote_text[:100]}...")
+                    return quote_text
+                else:
+                    logging.warning(f"Quote element with class '{self.quote_class}' not found on the page")
+                    if attempt == Config.MAX_RETRIES - 1:
+                        self.debug_quote_element()
+                    return None
+                    
+            except requests.RequestException as e:
+                logging.error(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt < Config.MAX_RETRIES - 1:
+                    time.sleep(Config.RETRY_DELAY)
+                else:
+                    logging.error("Max retries reached. Could not fetch Bible quote")
+                    return None
+    
+    def validate_config(self) -> bool:
+        """Validate Bible21 configuration."""
+        if not self.url:
+            logging.error("BIBLE21_URL is not set")
+            return False
+        if not self.quote_class:
+            logging.error("BIBLE21_QUOTE_CLASS is not set")
+            return False
+        return True
+    
+    def get_source_name(self) -> str:
+        return "bible21"
+
+class DailyVersesQuoteSource(QuoteSource):
+    """Quote source for dailyverses.net."""
+    
+    def __init__(self):
+        self.url = Config.DAILY_VERSES_URL
+        self.quote_class = Config.DAILY_VERSES_QUOTE_CLASS
+    
+    def debug_quote_element(self) -> None:
+        """
+        Debug function to help identify the current quote element class.
+        
+        This method:
+        1. Fetches the Daily Verses website
+        2. Logs all div elements with class b1
+        3. Helps identify the current quote element structure
+        """
+        try:
+            response = requests.get(self.url, timeout=10)
+            response.encoding = 'utf-8'
+            response.raise_for_status()
+            
+            soup = bs(response.text, 'html.parser')
+            
+            # Find all div elements with class b1
+            quote_divs = soup.find_all('div', attrs={'class': 'b1'})
+            
+            logging.info(f"Found {len(quote_divs)} div elements with class 'b1' on the page")
+            
+            # Log each quote div with its content
+            for i, div in enumerate(quote_divs):
+                # Find the span with class v1
+                quote_span = div.find('span', attrs={'class': 'v1'})
+                if quote_span:
+                    quote_text = quote_span.get_text().strip()
+                    logging.info(f"Quote div {i+1}: Text: {quote_text[:100]}...")
+                
+                # Find the reference div with class vr
+                ref_div = div.find('div', attrs={'class': 'vr'})
+                if ref_div:
+                    ref_link = ref_div.find('a', attrs={'class': 'vc'})
+                    if ref_link:
+                        ref_text = ref_link.get_text().strip()
+                        logging.info(f"Quote div {i+1}: Reference: {ref_text}")
+            
+            # Try to find the quote using the current class
+            quote_element = soup.find('span', attrs={'class': self.quote_class})
+            if quote_element:
+                logging.info(f"Quote found with current class '{self.quote_class}': {quote_element.get_text().strip()}")
+            else:
+                logging.warning(f"Quote NOT found with current class '{self.quote_class}'")
+                
+        except Exception as e:
+            logging.error(f"Error in debug_quote_element: {str(e)}")
+    
+    def fetch_quote(self) -> Optional[str]:
+        """Fetch the daily quote from dailyverses.net."""
+        for attempt in range(Config.MAX_RETRIES):
+            try:
+                response = requests.get(self.url, timeout=10)
+                response.encoding = 'utf-8'
+                response.raise_for_status()
+                
+                soup = bs(response.text, 'html.parser')
+                quote_div = soup.find('div', attrs={'class': 'b1'})
+                
+                if quote_div:
+                    # Find the verse text in span.v1
+                    verse_span = quote_div.find('span', attrs={'class': 'v1'})
+                    if verse_span:
+                        verse_text = verse_span.get_text().strip()
+                        
+                        # Find the reference div with class vr
+                        ref_div = quote_div.find('div', attrs={'class': 'vr'})
+                        if ref_div:
+                            ref_link = ref_div.find('a', attrs={'class': 'vc'})
+                            if ref_link:
+                                ref_text = ref_link.get_text().strip()
+                                quote_text = f"{verse_text} ({ref_text})"
+                                logging.info(f"Successfully fetched quote from dailyverses.net: {quote_text[:100]}...")
+                                return quote_text
+                        logging.info(f"Successfully fetched quote from dailyverses.net: {verse_text[:100]}...")
+                        return verse_text
+                else:
+                    logging.warning("Quote element not found on the page")
+                    if attempt == Config.MAX_RETRIES - 1:
+                        self.debug_quote_element()
+                    return None
+                    
+            except requests.RequestException as e:
+                logging.error(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt < Config.MAX_RETRIES - 1:
+                    time.sleep(Config.RETRY_DELAY)
+                else:
+                    logging.error("Max retries reached. Could not fetch Daily Verses quote")
+                    return None
+    
+    def validate_config(self) -> bool:
+        """Validate Daily Verses configuration."""
+        if not self.url:
+            logging.error("DAILY_VERSES_URL is not set")
+            return False
+        if not self.quote_class:
+            logging.error("DAILY_VERSES_QUOTE_CLASS is not set")
+            return False
+        return True
+    
+    def get_source_name(self) -> str:
+        return "dailyverses"
+
+class QuoteFetcher:
+    """Class to handle quote fetching from multiple sources."""
+    
+    def __init__(self):
+        self.sources: Dict[str, QuoteSource] = {
+            'bible21': Bible21QuoteSource(),
+            'dailyverses': DailyVersesQuoteSource()
+        }
+        self.current_source = Config.QUOTE_SOURCE
+        self.fallback_source = Config.FALLBACK_SOURCE
+        
+        # Validate current source
+        if self.current_source not in self.sources:
+            logging.error(f"Invalid quote source: {self.current_source}")
+            self.current_source = 'bible21'  # Default to bible21
+            
+        # Validate fallback source
+        if self.fallback_source not in self.sources:
+            logging.error(f"Invalid fallback source: {self.fallback_source}")
+            self.fallback_source = 'bible21'  # Default to bible21
+    
+    def fetch_quote(self) -> Optional[str]:
+        """Fetch a quote from the current source with fallback."""
+        try:
+            # Try current source
+            quote = self.sources[self.current_source].fetch_quote()
+            if quote:
+                logging.info(f"Successfully fetched quote from {self.current_source}")
+                return quote
+                
+            # Try fallback source if different from current
+            if self.fallback_source != self.current_source:
+                logging.info(f"Trying fallback source: {self.fallback_source}")
+                quote = self.sources[self.fallback_source].fetch_quote()
+                if quote:
+                    logging.info(f"Successfully fetched quote from fallback source: {self.fallback_source}")
+                    return quote
+                    
+            logging.error("Failed to fetch quote from both sources")
+            return None
+            
+        except Exception as e:
+            logging.error(f"Error fetching quote: {str(e)}")
+            return None
 
 class Config:
     """Configuration class to store all constants and settings."""
@@ -96,6 +354,11 @@ class Config:
         """Get appropriate Telegram chat ID based on production mode."""
         return cls.TELEGRAM_CHAT_ID if cls.is_production() else cls.TELEGRAM_TEST_CHAT_ID
     
+    @classmethod
+    def get_ai_service(cls) -> str:
+        """Get the current AI service to use."""
+        return str(os.getenv('AI_SERVICE', 'groq')).strip().lower()
+    
     # Static configuration values
     BIBLE_URL = os.getenv('BIBLE_URL', 'https://bible21.cz')
     QUOTE_CLASS = os.getenv('QUOTE_CLASS', 'daily-word__quote')
@@ -105,6 +368,7 @@ class Config:
     TELEGRAM_TEST_CHAT_ID = os.getenv('TELEGRAM_TEST_CHAT_ID')
     TOGETHER_API_KEY = os.getenv('TOGETHER_API_KEY')
     GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+    VENICE_API_KEY = os.getenv('VENICE_API_KEY')
     WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
     WEATHER_PLACE_ID = os.getenv('WEATHER_PLACE_ID', 'kutna-hora')
     MAX_RETRIES = int(os.getenv('MAX_RETRIES', '3'))
@@ -121,6 +385,14 @@ class Config:
     
     TEST_QUOTE = "Ti, kteří se vydávají na lodích na moře, kdo konají dílo na nesmírných vodách, spatřili Hospodinovy skutky, jeho divy na hlubině.(Ž107:23-24)"
 
+    # Quote source configuration (hardcoded)
+    QUOTE_SOURCE = 'bible21'  # Primary quote source
+    FALLBACK_SOURCE = 'dailyverses'  # Fallback quote source
+    BIBLE21_URL = 'https://bible21.cz'
+    BIBLE21_QUOTE_CLASS = 'daily-word__quote'
+    DAILY_VERSES_URL = 'https://dailyverses.net/cs'    
+    DAILY_VERSES_QUOTE_CLASS = 'v1'
+    
     @classmethod
     def validate_telegram_config(cls) -> bool:
         """Validate Telegram configuration settings."""
@@ -169,18 +441,38 @@ class Config:
         logging.info("Twitter configuration validated")
         return True
 
+    @classmethod
+    def validate_ai_config(cls) -> bool:
+        """Validate AI service configuration settings."""
+        service = cls.get_ai_service()
+        
+        if service == 'groq':
+            if not cls.GROQ_API_KEY:
+                logging.error("GROQ_API_KEY is not set")
+                return False
+        elif service == 'venice':
+            if not cls.VENICE_API_KEY:
+                logging.error("VENICE_API_KEY is not set")
+                return False
+        else:
+            logging.error(f"Invalid AI service: {service}")
+            return False
+            
+        logging.info(f"AI configuration validated. Using service: {service}")
+        return True
+
 # Dictionary of modern art styles for image generation
 IMAGE_ART = {
     'impressionism': {
         'description': 'Capturing fleeting moments with visible brushstrokes and emphasis on light effects',
         'characteristics': ['loose brushwork', 'natural light', 'outdoor scenes', 'vibrant colors', 'captured moments'],
-        'weight': 7,  # Highest weight - works excellently with nature and light themes
+        'weight': 8,  # Highest weight - works excellently with nature and light themes
         'shortcut': 'imp'
     },
     'post_impressionism': {
         'description': 'Emotional and symbolic use of color and form beyond natural representation',
         'characteristics': ['bold colors', 'expressive brushstrokes', 'symbolic elements', 'emotional depth', 'structured composition'],
-        'weight': 6,  # Very high weight - excellent for emotional and symbolic content
+        'weight': 8,  # Very high weight - excellent for emotional and symbolic content
         'shortcut': 'pim'
     },
     'fauvism': {
@@ -192,13 +484,13 @@ IMAGE_ART = {
     'expressionism': {
         'description': 'Distorted forms and intense colors to express emotional experience',
         'characteristics': ['distorted forms', 'intense colors', 'emotional expression', 'subjective perspective', 'dramatic contrast'],
-        'weight': 6,  # High weight - good for emotional content
+        'weight': 8,  # High weight - good for emotional content
         'shortcut': 'exp'
     },
     'cubism': {
         'description': 'Geometric fragmentation and multiple perspectives',
         'characteristics': ['geometric forms', 'multiple viewpoints', 'fragmented space', 'analytical approach', 'overlapping planes'],
-        'weight': 9,  # Medium-high weight - interesting for abstract concepts
+        'weight': 8,  # Medium-high weight - interesting for abstract concepts
         'shortcut': 'cub'
     },
     'futurism': {
@@ -216,13 +508,13 @@ IMAGE_ART = {
     'surrealism': {
         'description': 'Dreamlike imagery and unconscious mind exploration',
         'characteristics': ['dreamlike elements', 'unusual juxtapositions', 'symbolic imagery', 'fantastical scenes', 'psychological depth'],
-        'weight': 2,  # Low weight - great for spiritual and symbolic content, but i dont like it
+        'weight': 5,  # Low weight - great for spiritual and symbolic content, but i dont like it
         'shortcut': 'sur'
     },
     'abstract_expressionism': {
         'description': 'Spontaneous, emotional expression through abstract forms',
         'characteristics': ['gestural brushstrokes', 'emotional intensity', 'abstract forms', 'spontaneous creation', 'large scale'],
-        'weight': 6,  # High weight - good for emotional expression
+        'weight': 7,  # High weight - good for emotional expression
         'shortcut': 'aex'
     },    
     'minimalism': {
@@ -234,13 +526,13 @@ IMAGE_ART = {
     'mixed_media': {
         'description': 'Combination of various materials and techniques',
         'characteristics': ['diverse materials', 'layered elements', 'textural variety', 'experimental combinations', 'multimedia approach'],
-        'weight': 10,  # Medium weight - versatile but might be too complex
+        'weight': 8,  # Medium weight - versatile but might be too complex
         'shortcut': 'mix'
     },    
     'street_art': {
         'description': 'Urban expression and public space intervention',
         'characteristics': ['urban elements', 'bold graphics', 'public space', 'social commentary', 'graffiti techniques'],
-        'weight': 3,  # Low weight - might be too modern
+        'weight': 4,  # Low weight - might be too modern
         'shortcut': 'str'
     },
     'deconstructivist_art': {
@@ -248,7 +540,14 @@ IMAGE_ART = {
         'characteristics': ['geometric shapes', 'lines', 'deconstruction', 'abstraction', 'modernism'],
         'weight': 8,  # Medium weight - balanced approach
         'shortcut': 'dec'
-    }
+    },   
+    'art_deco': {
+        'description': 'Art Deco is a style that is characterized by its use of light and color.',
+        'characteristics': ['light', 'color', 'Art Deco', 'Art Deco art', 'Art Deco artists'],
+        'weight': 8,  # Medium weight - balanced approach
+        'shortcut': 'ade'
+    },  
+    
 }
 
 class WeightedStyleSelector:
@@ -308,7 +607,7 @@ class WeatherIconMapper:
         # Rain conditions
         'light_rain': '🌦️',
         'rain': '🌧️',
-        'possible_rain': '🌦️',
+        'psbl_rain': '🌦️',
         'rain_shower': '🌧️',
         'thunderstorm': '⛈️',
         'local_thunderstorms': '⛈️',
@@ -319,7 +618,7 @@ class WeatherIconMapper:
         'possible_snow': '🌨️',
         'snow_shower': '🌨️',
         'rain_and_snow': '🌨️',
-        'possible_rain_and_snow': '🌨️',
+        'psbl_rain_and_snow': '🌨️',
         'freezing_rain': '🌨️',
         'possible_freezing_rain': '🌨️',
         'hail': '🌨️',
@@ -484,35 +783,6 @@ class WeatherAPI:
             logging.error(f"Error formatting weather for caption: {str(e)}")
             return ""
 
-class BibleQuoteFetcher:
-    """Class to handle fetching quotes from the Bible website."""
-    
-    @staticmethod
-    def fetch_quote() -> Optional[str]:
-        """Fetch the daily quote from the Bible website."""
-        for attempt in range(Config.MAX_RETRIES):
-            try:
-                response = requests.get(Config.BIBLE_URL, timeout=10)
-                response.encoding = 'utf-8'
-                response.raise_for_status()
-                
-                soup = bs(response.text, 'html.parser')
-                quote_element = soup.find('span', attrs={'class': Config.QUOTE_CLASS})
-                
-                if quote_element:
-                    return quote_element.get_text().strip()
-                else:
-                    logging.warning("Quote element not found on the page")
-                    return None
-                    
-            except requests.RequestException as e:
-                logging.error(f"Attempt {attempt + 1} failed: {str(e)}")
-                if attempt < Config.MAX_RETRIES - 1:
-                    time.sleep(Config.RETRY_DELAY)
-                else:
-                    logging.error("Max retries reached. Could not fetch Bible quote")
-                    return None
-
 class GroqPromptGenerator:
     """Class to handle prompt generation using Groq AI."""
     
@@ -552,6 +822,7 @@ class GroqPromptGenerator:
             9. Image should not have the main object in the center of the image
             10. Image should avoid concrete objects but use abstract shapes and forms
             11. Consider the current weather conditions in the artistic style and mood, but do not use it as main focus
+            12. Consider using frame for the image
             
 
 Format your response as a single, well-structured prompt that can be directly used for image generation."""
@@ -588,11 +859,140 @@ Format your response as a single, well-structured prompt that can be directly us
             )
             
             enhanced_prompt = response.choices[0].message.content
+            logging.info("Successfully generated enhanced prompt using GROQ")
             return enhanced_prompt
             
         except Exception as e:
             logging.error(f"Error generating enhanced prompt: {str(e)}")
             return None
+
+class VenicePromptGenerator:
+    """Class to handle prompt generation using Venice.ai."""
+    
+    _instance = None
+    
+    def __new__(cls):
+        """Singleton pattern to ensure only one instance exists."""
+        if cls._instance is None:
+            cls._instance = super(VenicePromptGenerator, cls).__new__(cls)
+            cls._instance.style_selector = WeightedStyleSelector(IMAGE_ART)
+        return cls._instance
+    
+    @classmethod
+    def get_random_art_style(cls) -> dict:
+        """Get a random art style using weighted selection."""
+        if cls._instance is None:
+            cls._instance = cls()
+        style_name, style = cls._instance.style_selector.select_style()
+        style['name'] = style_name
+        logging.info(f"Selected art style: {style_name} - {style['description']}")
+        return style
+    
+    @staticmethod
+    def create_system_prompt(art_style: dict) -> str:
+        """Create the system prompt for Venice.ai."""
+        return f"""You are an expert at creating short and vivid image generation prompts. Your task is to analyze Bible quotes and create prompts that will generate meaningful, symbolic, and visually striking images.
+
+            The prompt should:
+            1. Be in English
+            2. Capture the essence and meaning of the quote
+            3. Use symbolic elements and metaphors            
+            4. Image should not contain any text
+            5. Image should be abstract
+            6. Image should use {art_style['name']} style with these characteristics: {', '.join(art_style['characteristics'])}            
+            7. Image should avoid obvious digital look and feel
+            8. Image should avoid obvious photography look and feel
+            9. Image should not have the main object in the center of the image
+            10. Image should avoid concrete objects but use abstract shapes and forms
+            11. Consider the current weather conditions in the artistic style and mood, but do not use it as main focus
+            
+
+Format your response as a single, well-structured prompt that can be directly used for image generation."""
+
+    @staticmethod
+    def generate_enhanced_prompt(quote: str, art_style: dict) -> Optional[str]:
+        """Generate an enhanced prompt using Venice.ai."""
+        try:
+            # Fetch weather data
+            weather_data = WeatherAPI.fetch_weather()
+            weather_context = WeatherAPI.format_weather_for_prompt(weather_data)
+            
+            headers = {
+                'Authorization': f'Bearer {Config.VENICE_API_KEY}',
+                'Content-Type': 'application/json'
+            }
+            
+            system_prompt = VenicePromptGenerator.create_system_prompt(art_style)
+            user_prompt = f"Create a detailed image generation prompt for this Bible quote, but do not use the quote itself in the description of the image: {quote}"
+            if weather_context:
+                user_prompt += f"\n\nConsider this weather context, but do not use it as main focus: {weather_context}"
+            
+            data = {
+                'model': 'venice-uncensored',
+                'messages': [
+                    {
+                        'role': 'system',
+                        'content': system_prompt
+                    },
+                    {
+                        'role': 'user',
+                        'content': user_prompt
+                    }
+                ],
+                'temperature': 0.7,
+                'max_tokens': 500,
+                'top_p': 0.9,
+                'frequency_penalty': 0,
+                'presence_penalty': 0
+            }
+            
+            for attempt in range(Config.MAX_RETRIES):
+                try:
+                    response = requests.post(
+                        'https://api.venice.ai/api/v1/chat/completions',
+                        headers=headers,
+                        json=data,
+                        timeout=30
+                    )
+                    
+                    if response.status_code == 429:
+                        logging.warning(f"Rate limit hit on attempt {attempt + 1}, retrying after delay")
+                        time.sleep(Config.RETRY_DELAY)
+                        continue
+                        
+                    response.raise_for_status()
+                    result = response.json()
+                    
+                    enhanced_prompt = result['choices'][0]['message']['content']
+                    logging.info("Successfully generated enhanced prompt using VENICE")
+                    return enhanced_prompt
+                    
+                except requests.exceptions.RequestException as e:
+                    if attempt < Config.MAX_RETRIES - 1:
+                        logging.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+                        time.sleep(Config.RETRY_DELAY)
+                    else:
+                        raise
+                        
+        except Exception as e:
+            logging.error(f"Error generating enhanced prompt: {str(e)}")
+            return None
+
+class PromptGeneratorFactory:
+    """Factory class to create appropriate prompt generator based on configuration."""
+    
+    @staticmethod
+    def get_prompt_generator() -> Union[GroqPromptGenerator, VenicePromptGenerator]:
+        """Get the appropriate prompt generator based on configuration."""
+        service = Config.get_ai_service()
+        
+        if service == 'venice':
+            if not Config.VENICE_API_KEY:
+                logging.error("Venice.ai API key not configured, falling back to Groq")
+                return GroqPromptGenerator()
+            return VenicePromptGenerator()
+            
+        return GroqPromptGenerator()
 
 class ImageGenerator:
     """Class to handle image generation using Together AI."""
@@ -600,7 +1000,8 @@ class ImageGenerator:
     @staticmethod
     def create_prompt(quote: str, art_style: dict) -> str:
         """Create a prompt for image generation based on the Bible quote."""
-        enhanced_prompt = GroqPromptGenerator.generate_enhanced_prompt(quote, art_style)
+        prompt_generator = PromptGeneratorFactory.get_prompt_generator()
+        enhanced_prompt = prompt_generator.generate_enhanced_prompt(quote, art_style)
         
         if not enhanced_prompt:
             logging.warning("Falling back to basic prompt generation")
@@ -789,6 +1190,8 @@ def process_quote_and_image(quote: str) -> bool:
             # Twitter success is optional, we don't fail the whole process if Twitter fails
             if not twitter_success:
                 logging.warning("Twitter posting failed, but continuing with process")
+        else:
+            logging.info("Twitter posting is disabled")
         
         return True  # Return True if at least Telegram was successful
         
@@ -807,11 +1210,22 @@ def main():
         
         # Validate configuration
         if not Config.validate_telegram_config():
-            logging.error("Invalid configuration. Exiting.")
+            logging.error("Invalid Telegram configuration. Exiting.")
             return
             
-        quote = BibleQuoteFetcher.fetch_quote()
+        if not Config.validate_twitter_config():
+            logging.error("Invalid Twitter configuration. Exiting.")
+            return
+            
+        if not Config.validate_ai_config():
+            logging.error("Invalid AI configuration. Exiting.")
+            return
+            
+        # Use new QuoteFetcher
+        quote_fetcher = QuoteFetcher()
+        quote = quote_fetcher.fetch_quote()
         #quote = Config.TEST_QUOTE
+        
         if not quote:
             logging.error("Failed to fetch Bible quote")
             return
