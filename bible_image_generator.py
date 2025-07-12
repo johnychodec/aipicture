@@ -359,6 +359,11 @@ class Config:
         """Get the current AI service to use."""
         return str(os.getenv('AI_SERVICE', 'groq')).strip().lower()
     
+    @classmethod
+    def get_image_service(cls) -> str:
+        """Get the current image generation service to use."""
+        return str(os.getenv('IMAGE_SERVICE', 'together')).strip().lower()
+    
     # Static configuration values
     BIBLE_URL = os.getenv('BIBLE_URL', 'https://bible21.cz')
     QUOTE_CLASS = os.getenv('QUOTE_CLASS', 'daily-word__quote')
@@ -444,21 +449,36 @@ class Config:
     @classmethod
     def validate_ai_config(cls) -> bool:
         """Validate AI service configuration settings."""
-        service = cls.get_ai_service()
+        ai_service = cls.get_ai_service()
+        image_service = cls.get_image_service()
         
-        if service == 'groq':
+        # Validate AI service for prompt generation
+        if ai_service == 'groq':
             if not cls.GROQ_API_KEY:
                 logging.error("GROQ_API_KEY is not set")
                 return False
-        elif service == 'venice':
+        elif ai_service == 'venice':
             if not cls.VENICE_API_KEY:
                 logging.error("VENICE_API_KEY is not set")
                 return False
         else:
-            logging.error(f"Invalid AI service: {service}")
+            logging.error(f"Invalid AI service: {ai_service}")
+            return False
+        
+        # Validate image generation service
+        if image_service == 'together':
+            if not cls.TOGETHER_API_KEY:
+                logging.error("TOGETHER_API_KEY is not set")
+                return False
+        elif image_service == 'venice':
+            if not cls.VENICE_API_KEY:
+                logging.error("VENICE_API_KEY is not set for image generation")
+                return False
+        else:
+            logging.error(f"Invalid image service: {image_service}")
             return False
             
-        logging.info(f"AI configuration validated. Using service: {service}")
+        logging.info(f"AI configuration validated. Using AI service: {ai_service}, Image service: {image_service}")
         return True
 
 # Dictionary of modern art styles for image generation
@@ -466,13 +486,13 @@ IMAGE_ART = {
     'impressionism': {
         'description': 'Capturing fleeting moments with visible brushstrokes and emphasis on light effects',
         'characteristics': ['loose brushwork', 'natural light', 'outdoor scenes', 'vibrant colors', 'captured moments'],
-        'weight': 8,  # Highest weight - works excellently with nature and light themes
+        'weight': 9,  # Highest weight - works excellently with nature and light themes
         'shortcut': 'imp'
     },
     'post_impressionism': {
         'description': 'Emotional and symbolic use of color and form beyond natural representation',
         'characteristics': ['bold colors', 'expressive brushstrokes', 'symbolic elements', 'emotional depth', 'structured composition'],
-        'weight': 8,  # Very high weight - excellent for emotional and symbolic content
+        'weight': 10,  # Very high weight - excellent for emotional and symbolic content
         'shortcut': 'pim'
     },
     'fauvism': {
@@ -484,7 +504,7 @@ IMAGE_ART = {
     'expressionism': {
         'description': 'Distorted forms and intense colors to express emotional experience',
         'characteristics': ['distorted forms', 'intense colors', 'emotional expression', 'subjective perspective', 'dramatic contrast'],
-        'weight': 8,  # High weight - good for emotional content
+        'weight': 9,  # High weight - good for emotional content
         'shortcut': 'exp'
     },
     'cubism': {
@@ -508,7 +528,7 @@ IMAGE_ART = {
     'surrealism': {
         'description': 'Dreamlike imagery and unconscious mind exploration',
         'characteristics': ['dreamlike elements', 'unusual juxtapositions', 'symbolic imagery', 'fantastical scenes', 'psychological depth'],
-        'weight': 5,  # Low weight - great for spiritual and symbolic content, but i dont like it
+        'weight': 4,  # Low weight - great for spiritual and symbolic content, but i dont like it
         'shortcut': 'sur'
     },
     'abstract_expressionism': {
@@ -520,7 +540,7 @@ IMAGE_ART = {
     'minimalism': {
         'description': 'Reduced to essential elements and geometric forms',
         'characteristics': ['simple forms', 'clean lines', 'limited palette', 'reduced elements', 'precise composition'],
-        'weight': 8,  # Medium-high weight - good for clear messages
+        'weight': 7,  # Medium-high weight - good for clear messages
         'shortcut': 'min'
     },    
     'mixed_media': {
@@ -540,13 +560,8 @@ IMAGE_ART = {
         'characteristics': ['geometric shapes', 'lines', 'deconstruction', 'abstraction', 'modernism'],
         'weight': 8,  # Medium weight - balanced approach
         'shortcut': 'dec'
-    },   
-    'art_deco': {
-        'description': 'Art Deco is a style that is characterized by its use of light and color.',
-        'characteristics': ['light', 'color', 'Art Deco', 'Art Deco art', 'Art Deco artists'],
-        'weight': 8,  # Medium weight - balanced approach
-        'shortcut': 'ade'
-    },  
+    }
+    
     
 }
 
@@ -1052,6 +1067,116 @@ class ImageGenerator:
             logging.error(f"Error generating image: {str(e)}")
             return None
 
+class VeniceImageGenerator:
+    """Class to handle image generation using Venice.ai."""
+    
+    @staticmethod
+    def create_prompt(quote: str, art_style: dict) -> str:
+        """Create a prompt for image generation based on the Bible quote."""
+        prompt_generator = PromptGeneratorFactory.get_prompt_generator()
+        enhanced_prompt = prompt_generator.generate_enhanced_prompt(quote, art_style)
+        
+        if not enhanced_prompt:
+            logging.warning("Falling back to basic prompt generation")
+            enhanced_prompt = f"""Create a symbolic and meaningful image representing this Bible quote: "{quote}"
+            The image should:
+            1. Capture the essence and meaning of the quote
+            2. Use symbolic elements and metaphors
+            3. Have a spiritual and contemplative atmosphere
+            4. Be suitable for sharing on social media
+            5. Use {art_style['name']} style with these characteristics: {', '.join(art_style['characteristics'])}"""
+        
+        return enhanced_prompt
+
+    @staticmethod
+    def generate_image(quote: str, art_style: dict) -> Optional[bytes]:
+        """Generate image using Venice.ai API."""
+        try:
+            prompt = VeniceImageGenerator.create_prompt(quote, art_style)
+            logging.info(f"Generating image with Venice.ai using prompt: {prompt}")
+            
+            headers = {
+                'Authorization': f'Bearer {Config.VENICE_API_KEY}',
+                'Content-Type': 'application/json'
+            }
+            
+            # Venice.ai image generation parameters based on API docs
+            data = {
+                'model': 'hidream',
+                'prompt': prompt,
+                'size': '1024x1024',
+                'response_format': 'b64_json',
+                'output_format': 'png',
+                'quality': 'auto',
+                'style': 'natural',
+                'n': 1,
+                'background': 'auto',
+                'moderation': 'auto',
+                'output_compression': 100
+            }
+            
+            for attempt in range(Config.MAX_RETRIES):
+                try:
+                    response = requests.post(
+                        'https://api.venice.ai/api/v1/images/generations',
+                        headers=headers,
+                        json=data,
+                        timeout=60  # Longer timeout for image generation
+                    )
+                    
+                    if response.status_code == 429:
+                        logging.warning(f"Rate limit hit on attempt {attempt + 1}, retrying after delay")
+                        time.sleep(Config.RETRY_DELAY)
+                        continue
+                        
+                    response.raise_for_status()
+                    result = response.json()
+                    
+                    if not result.get('data') or not result['data']:
+                        logging.error("No image data in Venice.ai response")
+                        return None
+                    
+                    # Extract base64 image data
+                    image_data = result['data'][0].get('b64_json')
+                    if not image_data:
+                        logging.error("No base64 image data in Venice.ai response")
+                        return None
+                    
+                    # Decode base64 to bytes
+                    import base64
+                    image_bytes = base64.b64decode(image_data)
+                    logging.info("Successfully generated image using Venice.ai")
+                    return image_bytes
+                    
+                except requests.exceptions.RequestException as e:
+                    if attempt < Config.MAX_RETRIES - 1:
+                        logging.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+                        time.sleep(Config.RETRY_DELAY)
+                    else:
+                        raise
+                        
+        except Exception as e:
+            logging.error(f"Error generating image with Venice.ai: {str(e)}")
+            return None
+
+class ImageGeneratorFactory:
+    """Factory class to create appropriate image generator based on configuration."""
+    
+    @staticmethod
+    def get_image_generator():
+        """Get the appropriate image generator based on configuration."""
+        service = Config.get_image_service()
+        
+        if service == 'venice':
+            if not Config.VENICE_API_KEY:
+                logging.error("Venice.ai API key not configured for image generation, falling back to Together AI")
+                return ImageGenerator()
+            logging.info("Using Venice.ai for image generation")
+            return VeniceImageGenerator()
+            
+        logging.info("Using Together AI for image generation")
+        return ImageGenerator()
+
 class TelegramBot:
     """Class to handle Telegram bot operations."""
     
@@ -1166,8 +1291,9 @@ def process_quote_and_image(quote: str) -> bool:
         # Get art style once and reuse it
         art_style = GroqPromptGenerator.get_random_art_style()
         
-        # Generate image using the selected art style
-        image_bytes = ImageGenerator.generate_image(quote, art_style)
+        # Generate image using the selected art style and service
+        image_generator = ImageGeneratorFactory.get_image_generator()
+        image_bytes = image_generator.generate_image(quote, art_style)
         if not image_bytes:
             return False
             
