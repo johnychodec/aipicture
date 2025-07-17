@@ -364,6 +364,11 @@ class Config:
         """Get the current image generation service to use."""
         return str(os.getenv('IMAGE_SERVICE', 'together')).strip().lower()
     
+    @classmethod
+    def get_prompt_length_limit(cls) -> int:
+        """Get the prompt length limit for Venice.ai."""
+        return int(os.getenv('PROMPT_LENGTH_LIMIT', '1500'))
+    
     # Static configuration values
     BIBLE_URL = os.getenv('BIBLE_URL', 'https://bible21.cz')
     QUOTE_CLASS = os.getenv('QUOTE_CLASS', 'daily-word__quote')
@@ -478,6 +483,11 @@ class Config:
             logging.error(f"Invalid image service: {image_service}")
             return False
             
+        # Validate prompt length limit configuration
+        prompt_limit = cls.get_prompt_length_limit()
+        if prompt_limit <= 0 or prompt_limit > 2000:
+            logging.warning(f"PROMPT_LENGTH_LIMIT ({prompt_limit}) seems unusual. Expected value is 1500 for Venice.ai")
+        
         logging.info(f"AI configuration validated. Using AI service: {ai_service}, Image service: {image_service}")
         return True
 
@@ -826,19 +836,19 @@ class GroqPromptGenerator:
         return f"""You are an expert at creating short and vivid image generation prompts. Your task is to analyze Bible quotes and create prompts that will generate meaningful, symbolic, and visually striking images.
 
             The prompt should:
-            1. Be in English
+            1. Be in English and the prompt should be less than 1500 characters
             2. Capture the essence and meaning of the quote
             3. Use symbolic elements and metaphors            
-            4. Image should not contain any text
-            5. Image should be abstract
-            6. Image should use {art_style['name']} style with these characteristics: {', '.join(art_style['characteristics'])}
-            7. Image should avoid obvious digital look and feel
-            8. Image should avoid obvious photography look and feel
-            9. Image should not have the main object in the center of the image
-            10. Image should avoid concrete objects but use abstract shapes and forms
-            11. Consider the current weather conditions in the artistic style and mood, but do not use it as main focus
-            12. Consider using frame for the image
-            
+            4. Mention that the image should not contain any text
+            5. Mention that the image should be abstract and dynamic
+            6. Mention that the image should not have central object, but rather little bit off center
+            7. Mention that the image should use {art_style['name']} style with these characteristics: {', '.join(art_style['characteristics'])}            
+            8. Mention that the image should avoid obvious digital look and feel
+            9. Mention that the image should avoid obvious photography look and feel            
+            10. Mention that the image should describe the frame that is suitable for the image and should not be too thick and should be from natural material
+            11. Mention that the image should use carefull signature altogether with year (in range from 1980 to 2025)
+            12. Consider the current weather conditions in the artistic style and mood, but do not use it as main focus
+
 
 Format your response as a single, well-structured prompt that can be directly used for image generation."""
 
@@ -909,17 +919,18 @@ class VenicePromptGenerator:
         return f"""You are an expert at creating short and vivid image generation prompts. Your task is to analyze Bible quotes and create prompts that will generate meaningful, symbolic, and visually striking images.
 
             The prompt should:
-            1. Be in English
+            1. Be in English and the prompt should be less than 1500 characters
             2. Capture the essence and meaning of the quote
             3. Use symbolic elements and metaphors            
-            4. Image should not contain any text
-            5. Image should be abstract
-            6. Image should use {art_style['name']} style with these characteristics: {', '.join(art_style['characteristics'])}            
-            7. Image should avoid obvious digital look and feel
-            8. Image should avoid obvious photography look and feel
-            9. Image should not have the main object in the center of the image
-            10. Image should avoid concrete objects but use abstract shapes and forms
+            4. Mention that the image should not contain any text
+            5. Mention that the image should be abstract and dynamic 
+            6. Mention that the image should use {art_style['name']} style with these characteristics: {', '.join(art_style['characteristics'])}            
+            7. Mention that the image should avoid obvious digital look and feel
+            8. Mention that the image should avoid obvious photography look and feel            
+            9. The prompt should describe picture frame that is suitable for the image and will be used to frame the image, the frame should not be too thick   
+            10. Mention that the image should have the random artist signature and the random year of the image 
             11. Consider the current weather conditions in the artistic style and mood, but do not use it as main focus
+            12. Mention that the image should not have central object, but rather little bit off center, preferably in the left or right side of the image
             
 
 Format your response as a single, well-structured prompt that can be directly used for image generation."""
@@ -954,7 +965,7 @@ Format your response as a single, well-structured prompt that can be directly us
                         'content': user_prompt
                     }
                 ],
-                'temperature': 0.7,
+                'temperature': 0.9,
                 'max_tokens': 500,
                 'top_p': 0.9,
                 'frequency_penalty': 0,
@@ -979,8 +990,17 @@ Format your response as a single, well-structured prompt that can be directly us
                     result = response.json()
                     
                     enhanced_prompt = result['choices'][0]['message']['content']
-                    logging.info("Successfully generated enhanced prompt using VENICE")
-                    return enhanced_prompt
+                    
+                    # Validate and optimize prompt length for Venice.ai
+                    optimized_prompt, was_truncated = PromptLengthValidator.optimize_prompt(enhanced_prompt)
+                    
+                    if was_truncated:
+                        logging.warning("Generated prompt was truncated to fit Venice.ai character limit")
+                        stats = PromptLengthValidator.get_prompt_statistics(enhanced_prompt)
+                        logging.info(f"Prompt statistics: {stats}")
+                    
+                    logging.info(f"Successfully generated enhanced prompt using VENICE (length: {len(optimized_prompt)} chars)")
+                    return optimized_prompt
                     
                 except requests.exceptions.RequestException as e:
                     if attempt < Config.MAX_RETRIES - 1:
@@ -1093,7 +1113,16 @@ class VeniceImageGenerator:
         """Generate image using Venice.ai API."""
         try:
             prompt = VeniceImageGenerator.create_prompt(quote, art_style)
-            logging.info(f"Generating image with Venice.ai using prompt: {prompt}")
+            
+            # Validate and optimize prompt length for Venice.ai image generation
+            optimized_prompt, was_truncated = PromptLengthValidator.optimize_prompt(prompt)
+            
+            if was_truncated:
+                logging.warning("Image generation prompt was truncated to fit Venice.ai character limit")
+                stats = PromptLengthValidator.get_prompt_statistics(prompt)
+                logging.info(f"Image prompt statistics: {stats}")
+            
+            logging.info(f"Generating image with Venice.ai using prompt (length: {len(optimized_prompt)} chars): {optimized_prompt}")
             
             headers = {
                 'Authorization': f'Bearer {Config.VENICE_API_KEY}',
@@ -1103,7 +1132,7 @@ class VeniceImageGenerator:
             # Venice.ai image generation parameters based on API docs
             data = {
                 'model': 'hidream',
-                'prompt': prompt,
+                'prompt': optimized_prompt,
                 'size': '1024x1024',
                 'response_format': 'b64_json',
                 'output_format': 'png',
@@ -1157,6 +1186,18 @@ class VeniceImageGenerator:
                         
         except Exception as e:
             logging.error(f"Error generating image with Venice.ai: {str(e)}")
+            
+            # Check if the error might be related to prompt length
+            error_str = str(e).lower()
+            if any(keyword in error_str for keyword in ['length', 'size', 'too long', 'limit']):
+                logging.warning("Error appears to be related to prompt length, attempting fallback to Together AI")
+                try:
+                    # Fallback to Together AI
+                    logging.info("Attempting fallback to Together AI for image generation")
+                    return ImageGenerator.generate_image(quote, art_style)
+                except Exception as fallback_error:
+                    logging.error(f"Fallback to Together AI also failed: {str(fallback_error)}")
+            
             return None
 
 class ImageGeneratorFactory:
@@ -1176,6 +1217,128 @@ class ImageGeneratorFactory:
             
         logging.info("Using Together AI for image generation")
         return ImageGenerator()
+
+class PromptLengthValidator:
+    """Class to validate and optimize prompt length for Venice.ai API."""
+    
+    # Venice.ai has a strict 1500 character limit for image generation prompts
+    VENICE_PROMPT_LIMIT = 1500
+    
+    @classmethod
+    def validate_prompt_length(cls, prompt: str) -> tuple[bool, int]:
+        """
+        Validate if a prompt is within the Venice.ai character limit.
+        
+        Args:
+            prompt: The prompt to validate
+            
+        Returns:
+            tuple: (is_valid, character_count)
+        """
+        char_count = len(prompt)
+        is_valid = char_count <= cls.VENICE_PROMPT_LIMIT
+        return is_valid, char_count
+    
+    @classmethod
+    def truncate_prompt(cls, prompt: str) -> str:
+        """
+        Intelligently truncate a prompt to fit within the Venice.ai character limit.
+        
+        Args:
+            prompt: The prompt to truncate
+            
+        Returns:
+            str: Truncated prompt that fits within the character limit
+        """
+        if len(prompt) <= cls.VENICE_PROMPT_LIMIT:
+            return prompt
+        
+        logging.info(f"Prompt length ({len(prompt)}) exceeds Venice.ai limit ({cls.VENICE_PROMPT_LIMIT}). Truncating...")
+        
+        # Start with the original prompt
+        truncated = prompt
+        
+        # First, try to remove common redundant phrases
+        redundant_phrases = [
+            "the image should",
+            "the image must",
+            "the image will",
+            "make sure the image",
+            "ensure the image",
+            "the image needs to",
+            "the image has to"
+        ]
+        
+        for phrase in redundant_phrases:
+            if len(truncated) <= cls.VENICE_PROMPT_LIMIT:
+                break
+            truncated = truncated.replace(phrase, "")
+        
+        # If still too long, try to remove repetitive words
+        if len(truncated) > cls.VENICE_PROMPT_LIMIT:
+            words_to_remove = ["very", "really", "quite", "extremely", "absolutely"]
+            for word in words_to_remove:
+                if len(truncated) <= cls.VENICE_PROMPT_LIMIT:
+                    break
+                truncated = truncated.replace(f" {word} ", " ")
+        
+        # If still too long, truncate at word boundary
+        if len(truncated) > cls.VENICE_PROMPT_LIMIT:
+            truncated = truncated[:cls.VENICE_PROMPT_LIMIT]
+            # Find the last space to avoid cutting words in half
+            last_space = truncated.rfind(' ')
+            if last_space > cls.VENICE_PROMPT_LIMIT * 0.8:  # Only if we're not losing too much
+                truncated = truncated[:last_space]
+        
+        # Add ellipsis if we truncated significantly
+        if len(truncated) < len(prompt) * 0.9:
+            truncated = truncated.rstrip() + "..."
+        
+        logging.info(f"Prompt truncated from {len(prompt)} to {len(truncated)} characters")
+        return truncated
+    
+    @classmethod
+    def optimize_prompt(cls, prompt: str) -> tuple[str, bool]:
+        """
+        Optimize a prompt for Venice.ai, ensuring it fits within the character limit.
+        
+        Args:
+            prompt: The prompt to optimize
+            
+        Returns:
+            tuple: (optimized_prompt, was_truncated)
+        """
+        is_valid, char_count = cls.validate_prompt_length(prompt)
+        
+        if is_valid:
+            logging.info(f"Prompt is within limit: {char_count}/{cls.VENICE_PROMPT_LIMIT} characters")
+            return prompt, False
+        else:
+            logging.warning(f"Prompt exceeds limit: {char_count}/{cls.VENICE_PROMPT_LIMIT} characters")
+            optimized_prompt = cls.truncate_prompt(prompt)
+            return optimized_prompt, True
+    
+    @classmethod
+    def get_prompt_statistics(cls, prompt: str) -> dict:
+        """
+        Get statistics about a prompt's length and optimization potential.
+        
+        Args:
+            prompt: The prompt to analyze
+            
+        Returns:
+            dict: Statistics about the prompt
+        """
+        char_count = len(prompt)
+        word_count = len(prompt.split())
+        
+        return {
+            'character_count': char_count,
+            'word_count': word_count,
+            'is_within_limit': char_count <= cls.VENICE_PROMPT_LIMIT,
+            'characters_over_limit': max(0, char_count - cls.VENICE_PROMPT_LIMIT),
+            'percentage_of_limit': (char_count / cls.VENICE_PROMPT_LIMIT) * 100
+        }
 
 class TelegramBot:
     """Class to handle Telegram bot operations."""
