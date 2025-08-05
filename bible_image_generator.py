@@ -496,25 +496,25 @@ IMAGE_ART = {
     'impressionism': {
         'description': 'Capturing fleeting moments with visible brushstrokes and emphasis on light effects',
         'characteristics': ['loose brushwork', 'natural light', 'outdoor scenes', 'vibrant colors', 'captured moments'],
-        'weight': 9,  # Highest weight - works excellently with nature and light themes
+        'weight': 8,  # Highest weight - works excellently with nature and light themes
         'shortcut': 'imp'
     },
     'post_impressionism': {
         'description': 'Emotional and symbolic use of color and form beyond natural representation',
         'characteristics': ['bold colors', 'expressive brushstrokes', 'symbolic elements', 'emotional depth', 'structured composition'],
-        'weight': 10,  # Very high weight - excellent for emotional and symbolic content
+        'weight': 5,  # Very high weight - excellent for emotional and symbolic content
         'shortcut': 'pim'
     },
     'fauvism': {
         'description': 'Bold, non-naturalistic colors and simplified forms',
         'characteristics': ['intense colors', 'simplified forms', 'expressive brushwork', 'emotional impact', 'non-naturalistic palette'],
-        'weight': 5,  # High weight - strong emotional impact
+        'weight': 4,  # High weight - strong emotional impact
         'shortcut': 'fau'
     },
     'expressionism': {
         'description': 'Distorted forms and intense colors to express emotional experience',
         'characteristics': ['distorted forms', 'intense colors', 'emotional expression', 'subjective perspective', 'dramatic contrast'],
-        'weight': 9,  # High weight - good for emotional content
+        'weight': 6,  # High weight - good for emotional content
         'shortcut': 'exp'
     },
     'cubism': {
@@ -538,7 +538,7 @@ IMAGE_ART = {
     'surrealism': {
         'description': 'Dreamlike imagery and unconscious mind exploration',
         'characteristics': ['dreamlike elements', 'unusual juxtapositions', 'symbolic imagery', 'fantastical scenes', 'psychological depth'],
-        'weight': 4,  # Low weight - great for spiritual and symbolic content, but i dont like it
+        'weight': 1,  # Low weight - great for spiritual and symbolic content, but i dont like it
         'shortcut': 'sur'
     },
     'abstract_expressionism': {
@@ -550,7 +550,7 @@ IMAGE_ART = {
     'minimalism': {
         'description': 'Reduced to essential elements and geometric forms',
         'characteristics': ['simple forms', 'clean lines', 'limited palette', 'reduced elements', 'precise composition'],
-        'weight': 7,  # Medium-high weight - good for clear messages
+        'weight': 9,  # Medium-high weight - good for clear messages
         'shortcut': 'min'
     },    
     'mixed_media': {
@@ -833,24 +833,7 @@ class GroqPromptGenerator:
     @staticmethod
     def create_system_prompt(art_style: dict) -> str:
         """Create the system prompt for Groq AI."""
-        return f"""You are an expert at creating short and vivid image generation prompts. Your task is to analyze Bible quotes and create prompts that will generate meaningful, symbolic, and visually striking images.
-
-            The prompt should:
-            1. Be in English and the prompt should be less than 1500 characters
-            2. Capture the essence and meaning of the quote
-            3. Use symbolic elements and metaphors            
-            4. Mention that the image should not contain any text
-            5. Mention that the image should be abstract and dynamic
-            6. Mention that the image should not have central object, but rather little bit off center
-            7. Mention that the image should use {art_style['name']} style with these characteristics: {', '.join(art_style['characteristics'])}            
-            8. Mention that the image should avoid obvious digital look and feel
-            9. Mention that the image should avoid obvious photography look and feel            
-            10. Mention that the image should describe the frame that is suitable for the image and should not be too thick and should be from natural material
-            11. Mention that the image should use carefull signature altogether with year (in range from 1980 to 2025)
-            12. Consider the current weather conditions in the artistic style and mood, but do not use it as main focus
-
-
-Format your response as a single, well-structured prompt that can be directly used for image generation."""
+        return f"""You want to create witty image generation prompts. Your task is to analyze Bible quotes and create prompts that will generate meaningful, symbolic, and visually striking images in {art_style['name']} style with these characteristics: {', '.join(art_style['characteristics'])}. Make sure that the prompt respects painting techniques of given art style."""
 
     @staticmethod
     def generate_enhanced_prompt(quote: str, art_style: dict) -> Optional[str]:
@@ -863,9 +846,15 @@ Format your response as a single, well-structured prompt that can be directly us
             client = Groq(api_key=Config.GROQ_API_KEY)
             system_prompt = GroqPromptGenerator.create_system_prompt(art_style)
             
-            user_prompt = f"Create a detailed image generation prompt for this Bible quote, but do not use the quote itself in the description of the image: {quote}"
+            user_prompt = f"""Create a detailed image generation prompt for this Bible quote, but do not use the quote itself in the description of the image: {quote}       
+                                The prompt should:
+                                   - Be in English and the prompt should be less than 1500 characters                                                                                                                                             
+                                   - Mention that the image should avoid obvious digital look and feel
+                                   - Mention that the image should be abstract                                   
+                                Format your response as a single, well-structured prompt that can be directly used for image generation."""
+            
             if weather_context:
-                user_prompt += f"\n\nConsider this weather context, but do not use it as main focus: {weather_context}"
+                user_prompt += f"\n\nConsider this weather context for the mood of the image: {weather_context}"
             
             response = client.chat.completions.create(
                 messages=[
@@ -878,8 +867,8 @@ Format your response as a single, well-structured prompt that can be directly us
                         "content": user_prompt
                     }
                 ],
-                model="llama-3.3-70b-versatile",
-                temperature=0.7,
+                model="moonshotai/kimi-k2-instruct",
+                temperature=0.9,
                 max_tokens=500
             )
             
@@ -916,24 +905,7 @@ class VenicePromptGenerator:
     @staticmethod
     def create_system_prompt(art_style: dict) -> str:
         """Create the system prompt for Venice.ai."""
-        return f"""You are an expert at creating short and vivid image generation prompts. Your task is to analyze Bible quotes and create prompts that will generate meaningful, symbolic, and visually striking images.
-
-            The prompt should:
-            1. Be in English and the prompt should be less than 1500 characters
-            2. Capture the essence and meaning of the quote
-            3. Use symbolic elements and metaphors            
-            4. Mention that the image should not contain any text
-            5. Mention that the image should be abstract and dynamic 
-            6. Mention that the image should use {art_style['name']} style with these characteristics: {', '.join(art_style['characteristics'])}            
-            7. Mention that the image should avoid obvious digital look and feel
-            8. Mention that the image should avoid obvious photography look and feel            
-            9. The prompt should describe picture frame that is suitable for the image and will be used to frame the image, the frame should not be too thick   
-            10. Mention that the image should have the random artist signature and the random year of the image 
-            11. Consider the current weather conditions in the artistic style and mood, but do not use it as main focus
-            12. Mention that the image should not have central object, but rather little bit off center, preferably in the left or right side of the image
-            
-
-Format your response as a single, well-structured prompt that can be directly used for image generation."""
+        return f"""You want to create witty image generation prompts. Your task is to analyze Bible quotes and create prompts that will generate meaningful, symbolic, and visually striking images in {art_style['name']} style with these characteristics: {', '.join(art_style['characteristics'])}. Make sure that the prompt respects painting techniques of given art style."""
 
     @staticmethod
     def generate_enhanced_prompt(quote: str, art_style: dict) -> Optional[str]:
@@ -949,9 +921,14 @@ Format your response as a single, well-structured prompt that can be directly us
             }
             
             system_prompt = VenicePromptGenerator.create_system_prompt(art_style)
-            user_prompt = f"Create a detailed image generation prompt for this Bible quote, but do not use the quote itself in the description of the image: {quote}"
+            user_prompt = f"""Create a detailed image generation prompt for this Bible quote, but do not use the quote itself in the description of the image: {quote}       
+                                The prompt should:
+                                   - Be in English and the prompt should be maximum of 1500 characters                                                                                                                                             
+                                   - Mention that the image should avoid obvious digital look and feel
+                                   - Mention that the image should be abstract and dynamic                                   
+                                Format your response as a single, well-structured prompt that can be directly used for image generation."""
             if weather_context:
-                user_prompt += f"\n\nConsider this weather context, but do not use it as main focus: {weather_context}"
+                user_prompt += f"\n\nConsider this weather context for the overall mood of the picture: {weather_context}"
             
             data = {
                 'model': 'venice-uncensored',
@@ -1059,7 +1036,8 @@ class ImageGenerator:
             logging.info(f"Generating image with prompt: {prompt}")
             
             response = client.images.generate(
-                model="black-forest-labs/FLUX.1-schnell-Free",
+                model="black-forest-labs/FLUX.1-schnell",
+                #model="black-forest-labs/FLUX.1-schnell-Free",
                 width=1024,
                 height=768,
                 steps=4,
